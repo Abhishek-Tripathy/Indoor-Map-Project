@@ -6,20 +6,7 @@ export default function Home() {
   const [file, setFile] = useState<File | null>(null);
   const [loading, setLoading] = useState(false);
 
-  function analyzeFile(parsed: any) {
-    const layers = new Set();
-    const entityTypes = new Set();
-
-    parsed.entities.forEach((e: any) => {
-      layers.add(e.layer);
-      entityTypes.add(e.type);
-    });
-
-    console.log("All layers:", Array.from(layers));
-    console.log("All entity types:", Array.from(entityTypes));
-
-    return parsed;
-  }
+ 
 
   const handleUpload = async () => {
     if (!file) return alert("Please select a file first!");
@@ -35,7 +22,6 @@ export default function Home() {
       });
       const json = await res.json();
       console.log("Parsed JSON:", json);
-      analyzeFile(json)
       alert("File parsed successfully! Check console for details.");
     } catch (err) {
       console.error(err);
