@@ -42,60 +42,102 @@
 // }
 
 
+// Only MTEXT OBJECTS
+
+// import { NextRequest, NextResponse } from "next/server";
+// import { MongoClient } from "mongodb";
+
+// export async function GET(request: NextRequest) {
+//   try {
+//     const client = new MongoClient(process.env.MONGODB_URI as string);
+//     await client.connect();
+//     const db = client.db(process.env.MONGODB_DB_NAME);
+
+//     // Fetch all layout documents
+//     const layouts = await db.collection("layouts").find({}).toArray();
+//     await client.close();
+
+//     if (layouts.length === 0) {
+//       console.log("❌ No layouts found in database.");
+//       return NextResponse.json({ error: "No layouts found" }, { status: 404 });
+//     }
+
+//     console.log("\n=== MTEXT Feature Inspection ===");
+
+//     const analysisResults = layouts.map((layoutDoc, index) => {
+//       const features = layoutDoc.geojson?.features || [];
+
+//       // Filter only MTEXT features
+//       const mtextFeatures = features.filter(
+//         (f: any) => f.properties?.dxfType === "MTEXT"
+//       );
+
+//       console.log(`\n📄 Layout ${index + 1} (${layoutDoc._id})`);
+//       console.log(`Total MTEXT features: ${mtextFeatures.length}`);
+
+//       // Log each MTEXT feature in detail
+//       mtextFeatures.forEach((feature: any, i: number) => {
+//         console.log(`\n🧩 MTEXT Feature ${i + 1}:`);
+//         console.log("Properties:", feature.properties);
+//         console.log("Geometry:", feature.geometry);
+//         console.log("------------------------------------");
+//       });
+
+//       return {
+//         layoutId: layoutDoc._id,
+//         totalMTEXT: mtextFeatures.length,
+//       };
+//     });
+
+//     return NextResponse.json({
+//       success: true,
+//       totalLayouts: layouts.length,
+//       analysis: analysisResults,
+//     });
+//   } catch (error) {
+//     console.error("MTEXT inspection error:", error);
+//     return NextResponse.json(
+//       { error: "Analysis failed: " + (error as Error).message },
+//       { status: 500 }
+//     );
+//   }
+// }
+
+
 import { NextRequest, NextResponse } from "next/server";
 import { MongoClient } from "mongodb";
+import * as turf from "@turf/turf";
 
-export async function GET(request: NextRequest) {
+export async function GET(req: NextRequest) {
   try {
     const client = new MongoClient(process.env.MONGODB_URI as string);
     await client.connect();
     const db = client.db(process.env.MONGODB_DB_NAME);
-
-    // Fetch all layout documents
-    const layouts = await db.collection("layouts").find({}).toArray();
+    const layout = await db.collection("layouts").findOne({});
     await client.close();
 
-    if (layouts.length === 0) {
-      console.log("No layouts found in database.");
-      return NextResponse.json({ error: "No layouts found" }, { status: 404 });
-    }
+    if (!layout) return NextResponse.json({ error: "No layout found" });
 
-    const analysisResults = layouts.map((layoutDoc, index) => {
-      const features = layoutDoc.geojson?.features || [];
-      console.log(`\n=== Layout ${index + 1} (${layoutDoc._id}) ===`);
-      console.log(`Total features: ${features.length}`);
+    const geojson = layout.geojson;
+    const walls = geojson.features.filter((f: any) =>
+      (f.properties?.layer || "").toUpperCase().includes("WALL")
+    );
 
-      const dxfTypeCounts: Record<string, number> = {};
-
-      features.forEach((feature: any) => {
-        const dxfType = feature.properties?.dxfType || "UNKNOWN";
-        dxfTypeCounts[dxfType] = (dxfTypeCounts[dxfType] || 0) + 1;
-      });
-
-      // Print summary
-      console.log("DXF Types found:");
-      Object.entries(dxfTypeCounts).forEach(([type, count]) => {
-        console.log(`  ${type}: ${count}`);
-      });
-
-      return {
-        layoutId: layoutDoc._id,
-        totalFeatures: features.length,
-        dxfTypeCounts,
-      };
-    });
+    const wallCollection = turf.featureCollection(walls);
+    const wallBBox = turf.bbox(wallCollection);
+    const wallBBoxPoly = turf.bboxPolygon(wallBBox);
+    const wallArea = turf.area(wallBBoxPoly);
 
     return NextResponse.json({
-      success: true,
-      totalLayouts: layouts.length,
-      analysis: analysisResults,
+      wallBBox,
+      wallArea,
+      width: wallBBox[2] - wallBBox[0],
+      height: wallBBox[3] - wallBBox[1],
+      wallCount: walls.length,
+      note: "Use this bbox as your grid or graph limit, not the entire drawing bbox."
     });
-  } catch (error) {
-    console.error("DXF Type Analysis Error:", error);
-    return NextResponse.json(
-      { error: "Analysis failed: " + (error as Error).message },
-      { status: 500 }
-    );
+  } catch (err) {
+    console.error("active-region error:", err);
+    return NextResponse.json({ error: (err as Error).message });
   }
 }
-

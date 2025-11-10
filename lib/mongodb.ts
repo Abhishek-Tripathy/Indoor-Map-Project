@@ -41,3 +41,13 @@ export async function getRoomsCollection() {
   const db = await getDatabase();
   return db.collection('rooms');
 }
+
+export async function getGraphCollection() {
+  const db = await getDatabase();
+  return db.collection('graph');
+}
+
+export async function getWalkablePathsCollection() {
+  const db = await getDatabase();
+  return db.collection("walkable_paths");
+}
